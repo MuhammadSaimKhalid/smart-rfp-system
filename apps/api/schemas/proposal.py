@@ -16,7 +16,9 @@ class ProposalBase(BaseModel):
     methodology: Optional[str] = Field(None, description="Proposed methodology or approach")
     warranties: Optional[str] = Field(None, description="Warranty terms")
     timeline_details: Optional[str] = Field(None, description="Detailed timeline breakdown")
+
     extracted_text: Optional[str] = None
+    dimensions: Optional[dict] = Field(default_factory=dict, description="Dynamic comparison dimensions")
 
 
 class ProposalCreate(ProposalBase):

@@ -39,6 +39,9 @@ class ProposalModel(SQLModel, table=True):
     warranties: Optional[str] = None
     timeline_details: Optional[str] = None
     extracted_text: Optional[str] = None
+    dimensions: dict = Field(
+        sa_column=Column(JSON), default_factory=dict, description="Dictionary of dynamic dimension key-value pairs"
+    )
     status: str = Field(default="submitted", index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

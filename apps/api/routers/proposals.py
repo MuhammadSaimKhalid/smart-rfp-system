@@ -62,36 +62,36 @@ async def upload_proposal(
     text = extract_text(str(pdf_path))
 
     # --- AI Data Extraction ---
-    # If key fields are missing, try to extract them from the document text
-    if not (contractor and price and start_date and summary):
-        extracted_data = extract_details_with_ai(text)
-        
-        # Populate missing fields if extraction was successful
-        if not contractor or contractor.lower() in ("n/a", "not captured", "unknown"):
-             if val := extracted_data.get("contractor_name"):
-                 contractor = val
-        
-        if price is None:
-             if val := extracted_data.get("price"):
-                 price = val
-                 
-        if currency == "USD": # Default value, check if AI found something different
-             if val := extracted_data.get("currency"):
-                 currency = val
-                 
-        if not start_date:
-             if val := extracted_data.get("start_date"):
-                 start_date = val
+    # ALWAYS extract all fields for comparison purposes
+    # AI will extract: contractor_name, price, summary, experience, methodology, warranties, timeline_details
+    extracted_data = extract_details_with_ai(text)
+    
+    # Populate missing fields if extraction was successful
+    if not contractor or contractor.lower() in ("n/a", "not captured", "unknown", "ai will extract this"):
+         if val := extracted_data.get("contractor_name"):
+             contractor = val
+    
+    if price is None:
+         if val := extracted_data.get("price"):
+             price = val
+             
+    if currency == "USD":  # Default value, check if AI found something different
+         if val := extracted_data.get("currency"):
+             currency = val
+             
+    if not start_date:
+         if val := extracted_data.get("start_date"):
+             start_date = val
 
-        if not summary:
-             if val := extracted_data.get("summary"):
-                 summary = val
-        
-        # New fields extraction (experience, methodology, warranties, timeline_details)
-        experience = extracted_data.get("experience")
-        methodology = extracted_data.get("methodology")
-        warranties = extracted_data.get("warranties")
-        timeline_details = extracted_data.get("timeline_details")
+    if not summary:
+         if val := extracted_data.get("summary"):
+             summary = val
+    
+    # ALWAYS extract these fields for comparison (even if user provided some basic fields)
+    experience = extracted_data.get("experience")
+    methodology = extracted_data.get("methodology")
+    warranties = extracted_data.get("warranties")
+    timeline_details = extracted_data.get("timeline_details")
 
     # Extract an email address from the PDF if one was not provided.
     if not contractor_email:
@@ -140,6 +140,11 @@ async def upload_proposal(
                     db_p.warranties = warranties
                 if timeline_details:
                     db_p.timeline_details = timeline_details
+
+                # Save dynamic dimensions
+                if dimensions := extracted_data.get("dimensions"):
+                    if isinstance(dimensions, dict):
+                        db_p.dimensions = dimensions
                     
                 session.add(db_p)
                 session.commit()

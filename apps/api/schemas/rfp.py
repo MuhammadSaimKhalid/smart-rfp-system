@@ -22,8 +22,6 @@ class RfpBase(BaseModel):
     def validate_budget(cls, v: int) -> int:
         if v < 500:
             raise ValueError("Budget must be at least 500.")
-        if v % 500 != 0:
-            raise ValueError("Budget must increase in steps of 500.")
         return v
 
 

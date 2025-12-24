@@ -15,6 +15,7 @@ You must extract:
 - methodology: Key points of their proposed approach or methodology.
 - warranties: Any warranty or guarantee terms mentioned.
 - timeline_details: Specifics about the schedule or timeline phases.
+- dimensions: A dictionary of other relevant key-value pairs found (e.g., {"ISO Certified": "Yes", "Team Size": "5", "Local Office": "No"}).
 
 Respond with STRICT JSON ONLY:
 {
@@ -26,5 +27,6 @@ Respond with STRICT JSON ONLY:
   "experience": string|null,
   "methodology": string|null,
   "warranties": string|null,
-  "timeline_details": string|null
+  "timeline_details": string|null,
+  "dimensions": { "key": "value" }
 }
