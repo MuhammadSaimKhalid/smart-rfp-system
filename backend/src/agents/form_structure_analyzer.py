@@ -1,0 +1,406 @@
+"""
+Form Structure Analyzer Agent
+
+This agent analyzes RFP PDFs to dynamically discover the proposal form structure.
+It identifies:
+- Tables (pricing sections, general conditions, additions)
+- Column headers
+- Fixed vs vendor-specific columns
+- Section hierarchy
+
+Uses LangChain's with_structured_output() for reliable schema extraction.
+"""
+
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, Field, create_model
+from langchain_openai import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain_core.prompts import ChatPromptTemplate
+import os
+
+
+# --- Discovery Models ---
+
+class DiscoveredColumn(BaseModel):
+    """A column discovered in a proposal form table."""
+    name: str = Field(description="Exact column header name as it appears in the table")
+    column_type: str = Field(description="Type: 'identifier' (Item#), 'description', 'quantity', 'unit', 'price', 'total', 'percentage', 'other'")
+    is_fixed: bool = Field(description="True if this column is the same across all vendors (e.g., Item, Description). False if it repeats per vendor (e.g., Unit Cost, Total)")
+    sample_values: Optional[List[str]] = Field(default=None, description="2-3 sample values from this column")
+
+
+class DiscoveredTable(BaseModel):
+    """A table discovered in the RFP proposal form."""
+    table_title: str = Field(description="Title of the table (e.g., 'AUDUBON VILLAS CONDOMINIUM - REPAIR SPECIFICATIONS')")
+    table_type: str = Field(description="Type: 'pricing_section', 'general_conditions', 'additions', 'summary'")
+    columns: List[DiscoveredColumn] = Field(description="All columns in this table")
+    section_headers: Optional[List[str]] = Field(default=None, description="Section headers within table (e.g., 'I Structural', 'II Balcony Restoration')")
+
+
+class DiscoveredFormRow(BaseModel):
+    """A single row from the proposal form (line item)."""
+    section: Optional[str] = Field(default=None, description="Section this row belongs to")
+    item_id: str = Field(description="Item identifier (1, 2, Ad1, etc.)")
+    description: str = Field(description="Description of work")
+    # Dynamic values dict - stores ALL column values (Quantity, Unit, Unit Cost, Total, %, etc.)
+    quantity: Optional[str] = Field(default=None, description="Quantity value")
+    unit: Optional[str] = Field(default=None, description="Unit of measure")
+    unit_cost: Optional[str] = Field(default=None, description="Unit cost value")
+    total: Optional[str] = Field(default=None, description="Total value")
+
+
+class ProposalFormStructure(BaseModel):
+    """Complete structure of the proposal submission form discovered from RFP."""
+    form_title: str = Field(description="Main title of the proposal form")
+    tables: List[DiscoveredTable] = Field(description="All tables found in the proposal form")
+    fixed_columns: List[str] = Field(description="Column names that are SAME across all vendors (typically Item, Description)")
+    vendor_columns: List[str] = Field(description="Column names that REPEAT for each vendor (typically Quantity, Unit, Unit Cost, Total)")
+    sections: List[str] = Field(description="All section names found (e.g., 'I Structural', 'II Balcony')")
+
+
+class FullProposalFormAnalysis(BaseModel):
+    """Complete analysis result including structure and rows (not for OpenAI structured output)."""
+    structure: ProposalFormStructure
+    rows: List[DiscoveredFormRow] = []
+
+
+class ExtractedRows(BaseModel):
+    """Container for extracted form rows (avoids List issue in structured output)."""
+    rows: List[DiscoveredFormRow]
+
+
+# --- Form Structure Analyzer Agent ---
+
+class FormStructureAnalyzer:
+    """
+    Agent that analyzes RFP documents to discover proposal form structure dynamically.
+    
+    This replaces the hardcoded schema approach with AI-driven discovery.
+    """
+    
+    def __init__(self, model: str = "gpt-4o", temperature: float = 0):
+        self.llm = ChatOpenAI(model=model, temperature=temperature)
+        self.chroma_path = os.path.abspath(os.path.join(os.getcwd(), "data/chromadb"))
+        self.embedding = OpenAIEmbeddings(model="text-embedding-3-small")
+    
+    def get_proposal_form_context(self, collection_name: str = "RFP_Context", k: int = 15) -> str:
+        """
+        Retrieves proposal form pages from ChromaDB.
+        
+        IMPROVED STRATEGY:
+        1. Find the most relevant 'anchor' pages using semantic search.
+        2. Identify the likely start of the proposal form.
+        3. Retrieve a generous window of CONTIGUOUS pages (e.g., start_page to start_page + 10)
+           to ensure we capture multi-page tables without gaps.
+        """
+        db = Chroma(
+            persist_directory=self.chroma_path, 
+            embedding_function=self.embedding, 
+            collection_name=collection_name
+        )
+        
+        # 1. Find Anchor Pages - query for BOTH form structure AND pricing data
+        query = "Proposal Submission Form Bid Sheet Schedule of Values Unit Price Total Cost Extended Amount Pricing Table"
+        results = db.similarity_search(query, k=k)
+        
+        if not results:
+            return ""
+
+        # 2. Identify Page Range
+        # Extract page numbers from metadata
+        pages = []
+        print("DEBUG: Search Results Candidates:")
+        for doc in results:
+            p = doc.metadata.get('page')
+            if p is not None:
+                pages.append(int(p))
+                print(f" - Page {p}: {doc.page_content[:50]}...")
+        
+        if not pages:
+            # Fallback if no page metadata
+            return "\n\n".join([doc.page_content for doc in results])
+            
+        # Find the most likely start page (min page from top matches)
+        start_page = min(pages)
+        end_page = start_page + 12 # Fetch 12 pages to cover long forms
+        
+        print(f"DEBUG: Form Anchor found at Page {start_page}. Fetching range {start_page}-{end_page}...")
+
+        # 3. Fetch Contiguous Range
+        print(f"DEBUG: Fetching exact chunks for pages {start_page} to {end_page}...")
+        
+        import re
+        # Pattern for dollar amounts like $4.10, $131,137.50, $1,295,648.70
+        dollar_pattern = re.compile(r'\$[\d,]+\.?\d*')
+        
+        full_context_docs = []
+        docs_with_prices = []  # Chunks that contain actual dollar amounts
+        docs_without_prices = []  # Chunks without dollar amounts
+        
+        for p in range(start_page, end_page + 1):
+            try:
+                # Fetch chunks for this specific page
+                result = db.get(where={"page": p})
+                page_texts = result['documents']
+                if page_texts:
+                    for text in page_texts:
+                        # Check if this chunk contains dollar amounts
+                        if dollar_pattern.search(text):
+                            docs_with_prices.append(text)
+                        else:
+                            docs_without_prices.append(text)
+            except Exception as e:
+                print(f"WARN: Failed to fetch page {p}: {e}")
+        
+        # PRIORITIZE chunks with dollar amounts (actual prices) over chunks without
+        # This ensures filled pricing tables come before blank templates
+        full_context_docs = docs_with_prices + docs_without_prices
+        
+        print(f"DEBUG: Form Context: Retained {len(full_context_docs)} chunks from pages {start_page}-{end_page}")
+        print(f"  - Chunks with prices ($): {len(docs_with_prices)}")
+        print(f"  - Chunks without prices: {len(docs_without_prices)}")
+        
+        return "\n\n".join(full_context_docs)
+    
+    def discover_form_structure(self, rfp_context: str) -> ProposalFormStructure:
+        """
+        Analyzes RFP content to discover the proposal form structure dynamically.
+        
+        Uses with_structured_output() for reliable extraction.
+        """
+        print("--- Form Structure Analyzer: Discovering Form Structure ---")
+        
+        # Create structured LLM with ProposalFormStructure schema
+        structured_llm = self.llm.with_structured_output(ProposalFormStructure)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert RFP Analyst specializing in construction bid documents.
+
+Your task is to analyze the RFP proposal submission form and discover its EXACT structure.
+
+ANALYSIS STEPS:
+1. Find the "Proposal Submission" or "Bid Form" section in the document
+2. Identify ALL tables (Pricing Sections, General Conditions, Additions)
+3. List the EXACT column headers for each table
+4. Determine which columns are FIXED (same for all vendors) vs VENDOR-SPECIFIC (repeat per vendor)
+5. Extract all section headers (I, II, III, etc.)
+6. Extract all line items with their values
+
+COLUMN CLASSIFICATION RULES:
+- FIXED columns (appear once, same for all vendors):
+  * "Item", "Item #", "Line" - identifiers
+  * "Description", "Description of Work", "Scope" - work descriptions
+  
+- VENDOR columns (repeat for each vendor submission):
+  * "Quantity", "Qty", "Estimated Quantity" - amounts
+  * "Unit", "UOM" - units of measure
+  * "Unit Cost", "Unit Price", "Rate" - pricing
+  * "Total", "Extended Total", "Amount" - totals
+  * "%" - percentages (for General Conditions)
+
+Be PRECISE with column names - use the EXACT text from the document."""),
+            ("user", """RFP Document Content:
+
+{rfp_content}
+
+Analyze this RFP and extract the complete proposal form structure.""")
+        ])
+        
+        chain = prompt | structured_llm
+        
+        try:
+            result = chain.invoke({"rfp_content": rfp_context})
+            print(f"  ✓ Discovered {len(result.tables)} tables, {len(result.sections)} sections")
+            print(f"  ✓ Fixed columns: {result.fixed_columns}")
+            print(f"  ✓ Vendor columns: {result.vendor_columns}")
+            return result
+        except Exception as e:
+            print(f"  ✗ Discovery failed: {e}")
+            raise
+    
+    def extract_form_rows(self, rfp_context: str, structure: ProposalFormStructure) -> List[DiscoveredFormRow]:
+        """
+        Extracts all line items from the proposal form using the discovered structure.
+        """
+        print("--- Form Structure Analyzer: Extracting Form Rows ---")
+        
+        # DEBUG: Print a sample of the context to see what the AI is receiving
+        print(f"  DEBUG: Context length = {len(rfp_context)} chars")
+        print(f"  DEBUG: Context sample (first 500 chars):\n{rfp_context[:500]}...")
+        
+        # Create structured LLM for row extraction using wrapper model
+        structured_llm = self.llm.with_structured_output(ExtractedRows)
+        
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are extracting line items from a proposal form or bid form document.
+
+Extract EVERY line item from the document. For EACH item, extract:
+1. section - which section it belongs to (e.g., "I Structural", "General Conditions")
+2. item_id - the item number or name (1, 2, 3, "Repair Specifications", etc.)
+3. description - the full description of work
+4. quantity - the quantity value if available
+5. unit - the unit of measure if available (SF, LF, LS, EA, etc.)
+6. unit_cost - the unit cost/price per unit if available
+7. total - the total amount for this line item
+
+EXTRACTING PRICES - CRITICAL:
+- Look for ANY dollar amounts ($) in the document - these are prices!
+- Dollar amounts look like: $4.10, $50,000.00, $1,122,772.91
+- If the table has a "Price" column, put that value in "total"
+- If the table has separate "Unit Cost" and "Total" columns, use both
+- If there's only one price per row, put it in "total"
+- NEVER leave unit_cost or total as null if there is a $ amount for that row
+
+IMPORTANT:
+- Extract values from whatever table format is in the document
+- Do NOT skip any line items - extract ALL of them
+- Look at the ACTUAL content, not at TBD placeholders
+- Prioritize rows that have dollar amounts over rows with TBD"""),
+            ("user", """Document Content:
+
+{rfp_content}
+
+Extract all line items with their prices (look for $ amounts).""")
+        ])
+        
+        chain = prompt | structured_llm
+        
+        try:
+            result = chain.invoke({
+                "rfp_content": rfp_context
+            })
+            print(f"  ✓ Extracted {len(result.rows)} line items")
+            return result.rows
+        except Exception as e:
+            print(f"  ✗ Row extraction failed: {e}")
+            return []
+    
+    def analyze_rfp(self, collection_name: str = "RFP_Context") -> FullProposalFormAnalysis:
+        """
+        Main entry point: Fully analyze an RFP and return its proposal form structure.
+        
+        Args:
+            collection_name: ChromaDB collection containing the ingested RFP
+            
+        Returns:
+            FullProposalFormAnalysis with structure and extracted rows
+        """
+        # Step 1: Get context from vector store
+        context = self.get_proposal_form_context(collection_name)
+        
+        # Step 2: Discover structure
+        structure = self.discover_form_structure(context)
+        
+        # Step 3: Extract all rows
+        rows = self.extract_form_rows(context, structure)
+        
+        return FullProposalFormAnalysis(structure=structure, rows=rows)
+
+
+# --- Dynamic Pydantic Model Generator ---
+
+def sanitize_column_name(name: str) -> str:
+    """Convert column name to valid Python identifier."""
+    return name.lower().replace(" ", "_").replace("/", "_").replace("%", "percent").replace("#", "_num")
+
+
+def create_dynamic_row_model(fixed_columns: List[str], vendor_columns: List[str], num_vendors: int = 1) -> type[BaseModel]:
+    """
+    Generate a Pydantic model at runtime based on discovered columns.
+    
+    For single vendor extraction:
+        - All columns appear once
+        
+    For multi-vendor comparison:
+        - Fixed columns appear once
+        - Vendor columns repeat for each vendor
+    """
+    fields: Dict[str, Any] = {}
+    
+    # Add fixed columns (appear once)
+    for col in fixed_columns:
+        field_name = sanitize_column_name(col)
+        fields[field_name] = (Optional[str], Field(default=None, description=f"Value for '{col}'"))
+    
+    if num_vendors == 1:
+        # Single vendor: all columns appear once
+        for col in vendor_columns:
+            field_name = sanitize_column_name(col)
+            fields[field_name] = (Optional[str], Field(default=None, description=f"Value for '{col}'"))
+    else:
+        # Multi-vendor: vendor columns repeat
+        for i in range(num_vendors):
+            vendor_prefix = f"vendor_{i+1}_"
+            for col in vendor_columns:
+                field_name = vendor_prefix + sanitize_column_name(col)
+                fields[field_name] = (Optional[str], Field(default=None, description=f"Vendor {i+1} value for '{col}'"))
+    
+    return create_model("DynamicFormRow", **fields)
+
+
+def create_comparison_row_model(structure: ProposalFormStructure, vendor_names: List[str]) -> type[BaseModel]:
+    """
+    Create a model specifically for multi-vendor comparison matrix.
+    
+    Args:
+        structure: Discovered form structure
+        vendor_names: List of vendor names ["DueAll", "IECON", "EmpireWorks"]
+    """
+    fields: Dict[str, Any] = {}
+    
+    # Add section field
+    fields["section"] = (Optional[str], Field(default=None, description="Section name"))
+    
+    # Add fixed columns
+    for col in structure.fixed_columns:
+        field_name = sanitize_column_name(col)
+        fields[field_name] = (Optional[str], Field(default=None, description=f"Fixed: {col}"))
+    
+    # Add vendor-specific columns for each vendor
+    for vendor_name in vendor_names:
+        vendor_prefix = sanitize_column_name(vendor_name) + "_"
+        for col in structure.vendor_columns:
+            field_name = vendor_prefix + sanitize_column_name(col)
+            fields[field_name] = (Optional[str], Field(default=None, description=f"{vendor_name}: {col}"))
+    
+    return create_model("ComparisonRow", **fields)
+
+
+# --- Test ---
+if __name__ == "__main__":
+    print("=== Testing Form Structure Analyzer ===\n")
+    
+    analyzer = FormStructureAnalyzer()
+    
+    try:
+        structure = analyzer.analyze_rfp("RFP_Context")
+        
+        print("\n--- Results ---")
+        print(f"Form Title: {structure.form_title}")
+        print(f"Tables: {[t.table_title for t in structure.tables]}")
+        print(f"Fixed Columns: {structure.fixed_columns}")
+        print(f"Vendor Columns: {structure.vendor_columns}")
+        print(f"Sections: {structure.sections}")
+        print(f"Total Rows: {len(structure.rows)}")
+        
+        # Test dynamic model generation
+        print("\n--- Dynamic Model Test ---")
+        DynamicRow = create_dynamic_row_model(
+            structure.fixed_columns, 
+            structure.vendor_columns,
+            num_vendors=1
+        )
+        print(f"Generated model fields: {list(DynamicRow.model_fields.keys())}")
+        
+        # Test comparison model
+        ComparisonRow = create_comparison_row_model(
+            structure,
+            ["DueAll", "IECON", "EmpireWorks"]
+        )
+        print(f"Comparison model fields: {list(ComparisonRow.model_fields.keys())[:10]}...")
+        
+    except Exception as e:
+        print(f"Test failed: {e}")
+        import traceback
+        traceback.print_exc()

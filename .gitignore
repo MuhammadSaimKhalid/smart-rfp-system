@@ -99,3 +99,21 @@ dmypy.json
 
 # Agent artifacts
 .gemini/
+
+# Test/sample files - do not commit
+debug_requirements.py
+drive-download-20251229T152332Z-1-001.zip
+drive-download-20251229T152332Z-1-001/
+ilovepdf_split-range.zip
+ilovepdf_split-range/
+Dynamic_Matrix_*.xlsx
+Property*.pdf
+proposal_full_text.txt
+*.pdf
+*.xlsx
+*.zip
+backend.log
+frontend/node_modules/
+node_modules/
+data/
+storage/
