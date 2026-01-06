@@ -44,10 +44,50 @@ class ProposalModel(SQLModel, table=True):
     currency: str = "USD"
     start_date: Optional[date] = None
     summary: Optional[str] = None
-    experience: Optional[str] = None
+    
+    # Enhanced extraction fields (stored as JSON arrays of bullet points)
+    experience: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list, 
+        description="Experience bullet points"
+    )
+    scope_understanding: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="Scope understanding bullet points"
+    )
+    materials: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="Materials/equipment bullet points"
+    )
+    timeline: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="Timeline/schedule bullet points"
+    )
+    warranty: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="Warranty terms bullet points"
+    )
+    safety: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="Safety practices bullet points"
+    )
+    cost_breakdown: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="Cost breakdown bullet points"
+    )
+    termination_term: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="Termination terms bullet points"
+    )
+    references: List[str] = Field(
+        sa_column=Column(JSON), default_factory=list,
+        description="References bullet points"
+    )
+    
+    # Legacy fields (kept for backward compatibility)
     methodology: Optional[str] = None
     warranties: Optional[str] = None
     timeline_details: Optional[str] = None
+    
     extracted_text: Optional[str] = None
     dimensions: dict = Field(
         sa_column=Column(JSON), default_factory=dict, description="Dictionary of dynamic dimension key-value pairs"

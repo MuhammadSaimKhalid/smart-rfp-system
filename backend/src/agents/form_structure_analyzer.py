@@ -45,7 +45,9 @@ class DiscoveredFormRow(BaseModel):
     section: Optional[str] = Field(default=None, description="Section this row belongs to")
     item_id: str = Field(description="Item identifier (1, 2, Ad1, etc.)")
     description: str = Field(description="Description of work")
-    # Dynamic values dict - stores ALL column values (Quantity, Unit, Unit Cost, Total, %, etc.)
+    # Dynamic values dict - stores ALL column values with original column names
+    values: Optional[Dict[str, str]] = Field(default=None, description="All column values keyed by column name")
+    # Legacy fields for backward compatibility
     quantity: Optional[str] = Field(default=None, description="Quantity value")
     unit: Optional[str] = Field(default=None, description="Unit of measure")
     unit_cost: Optional[str] = Field(default=None, description="Unit cost value")

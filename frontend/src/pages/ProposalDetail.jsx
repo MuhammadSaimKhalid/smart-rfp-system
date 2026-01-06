@@ -261,7 +261,7 @@ export default function ProposalDetail() {
                             {fullProposal.summary && (
                                 <div>
                                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
-                                        Summary
+                                        📝 Summary
                                     </h3>
                                     <p className="text-slate-700">{fullProposal.summary}</p>
                                 </div>
@@ -271,7 +271,7 @@ export default function ProposalDetail() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-1">
-                                        Price
+                                        💰 Price
                                     </h3>
                                     <p className="text-lg font-mono text-slate-900">
                                         {fullProposal.price ? `${fullProposal.currency} $${fullProposal.price.toLocaleString()}` : 'Not specified'}
@@ -279,7 +279,7 @@ export default function ProposalDetail() {
                                 </div>
                                 <div>
                                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-1">
-                                        Start Date
+                                        📅 Start Date
                                     </h3>
                                     <p className="text-lg text-slate-900">
                                         {fullProposal.start_date || 'Not specified'}
@@ -287,43 +287,129 @@ export default function ProposalDetail() {
                                 </div>
                             </div>
 
-                            {/* Experience */}
-                            {fullProposal.experience && (
+                            {/* Experience - Now an array */}
+                            {fullProposal.experience && fullProposal.experience.length > 0 && (
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-2">
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
                                         💼 Experience & Qualifications
                                     </h3>
-                                    <p className="text-slate-700 whitespace-pre-wrap">{fullProposal.experience}</p>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {(Array.isArray(fullProposal.experience) ? fullProposal.experience : [fullProposal.experience]).map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
 
-                            {/* Methodology */}
-                            {fullProposal.methodology && (
+                            {/* Scope Understanding */}
+                            {fullProposal.scope_understanding && fullProposal.scope_understanding.length > 0 && (
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-2">
-                                        🔧 Methodology & Approach
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        🎯 Scope Understanding
                                     </h3>
-                                    <p className="text-slate-700 whitespace-pre-wrap">{fullProposal.methodology}</p>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.scope_understanding.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
 
-                            {/* Warranties */}
-                            {fullProposal.warranties && (
+                            {/* Materials */}
+                            {fullProposal.materials && fullProposal.materials.length > 0 && (
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-2">
-                                        🛡️ Warranties & Guarantees
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        🔧 Materials & Equipment
                                     </h3>
-                                    <p className="text-slate-700 whitespace-pre-wrap">{fullProposal.warranties}</p>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.materials.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
 
                             {/* Timeline */}
-                            {fullProposal.timeline_details && (
+                            {fullProposal.timeline && fullProposal.timeline.length > 0 && (
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-2">
-                                        📅 Timeline Details
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        ⏱️ Timeline
                                     </h3>
-                                    <p className="text-slate-700 whitespace-pre-wrap">{fullProposal.timeline_details}</p>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.timeline.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* Warranty */}
+                            {fullProposal.warranty && fullProposal.warranty.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        🛡️ Warranty & Guarantees
+                                    </h3>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.warranty.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* Safety */}
+                            {fullProposal.safety && fullProposal.safety.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        🦺 Safety Practices
+                                    </h3>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.safety.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* Cost Breakdown */}
+                            {fullProposal.cost_breakdown && fullProposal.cost_breakdown.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        💵 Cost Breakdown
+                                    </h3>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.cost_breakdown.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* Termination Terms */}
+                            {fullProposal.termination_term && fullProposal.termination_term.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        📋 Termination Terms
+                                    </h3>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.termination_term.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* References */}
+                            {fullProposal.references && fullProposal.references.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
+                                        👥 References
+                                    </h3>
+                                    <ul className="list-disc list-inside text-slate-700 space-y-1">
+                                        {fullProposal.references.map((item, idx) => (
+                                            <li key={idx}>{item}</li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
 
@@ -331,7 +417,7 @@ export default function ProposalDetail() {
                             {fullProposal.contractor_email && (
                                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                                     <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-2">
-                                        Contact Information
+                                        📧 Contact Information
                                     </h3>
                                     <p className="text-slate-700">
                                         <span className="font-semibold">{fullProposal.contractor}</span>

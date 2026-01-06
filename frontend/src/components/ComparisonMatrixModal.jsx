@@ -74,8 +74,9 @@ export default function ComparisonMatrixModal({ rfpId, isOpen, onClose }) {
 
     if (!isOpen) return null;
 
-    // Dynamic vendor columns from API response
+    // Dynamic columns from API response
     const vendorColumns = data?.vendor_columns || ['Unit Cost', 'Total'];
+    const fixedColumns = data?.fixed_columns || ['Item', 'Description'];
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-8 animate-fade-in">
@@ -116,10 +117,13 @@ export default function ComparisonMatrixModal({ rfpId, isOpen, onClose }) {
                             <table className="w-full text-sm text-left border-collapse">
                                 <thead className="bg-slate-800 text-slate-200 sticky top-0 z-10 shadow-md">
                                     <tr>
-                                        <th className="px-4 py-3 border-r border-slate-600 w-20">Item</th>
-                                        <th className="px-4 py-3 border-r border-slate-600 w-64">Description</th>
-                                        <th className="px-4 py-3 border-r border-slate-600 w-20">Qty</th>
-                                        <th className="px-4 py-3 border-r border-slate-600 w-20">Unit</th>
+                                        {/* Dynamic fixed columns from RFP schema */}
+                                        {fixedColumns.map((col, idx) => (
+                                            <th key={`fixed-${idx}`} className={`px-4 py-3 border-r border-slate-600 ${idx === 0 ? 'w-20' : 'w-64'}`}>
+                                                {col}
+                                            </th>
+                                        ))}
+                                        {/* Vendor headers */}
                                         {data.proposals.map(p => (
                                             <th key={p.id} colSpan={vendorColumns.length} className="px-4 py-3 border-r border-slate-600 text-center min-w-[180px]">
                                                 <div className="font-bold text-white mb-1">{p.vendor}</div>
@@ -131,9 +135,9 @@ export default function ComparisonMatrixModal({ rfpId, isOpen, onClose }) {
                                             </th>
                                         ))}
                                     </tr>
-                                    {/* Dynamic column headers */}
+                                    {/* Dynamic vendor column sub-headers */}
                                     <tr className="bg-slate-700 text-xs uppercase text-slate-300">
-                                        <th className="px-4 py-1 border-r border-slate-600" colSpan={4}></th>
+                                        <th className="px-4 py-1 border-r border-slate-600" colSpan={fixedColumns.length}></th>
                                         {data.proposals.map(p => (
                                             <React.Fragment key={p.id}>
                                                 {vendorColumns.map((col, colIdx) => (
@@ -162,18 +166,32 @@ export default function ComparisonMatrixModal({ rfpId, isOpen, onClose }) {
                                                     </tr>
                                                 )}
                                                 <tr className={`transition-colors group ${isGrandTotal ? 'bg-slate-800 text-white font-bold sticky bottom-0' : 'hover:bg-blue-50'}`}>
-                                                    <td className={`px-4 py-2 border-r ${isGrandTotal ? 'border-slate-600 text-white' : 'border-slate-200 font-mono text-slate-600 bg-slate-50/50'}`}>
-                                                        {isGrandTotal ? '' : row.item_id}
-                                                    </td>
-                                                    <td className={`px-4 py-2 border-r max-w-xs ${isGrandTotal ? 'border-slate-600 text-white text-lg' : 'border-slate-200 text-slate-700 truncate'}`} title={row.description}>
-                                                        {row.description}
-                                                    </td>
-                                                    <td className={`px-4 py-2 border-r text-center ${isGrandTotal ? 'border-slate-600' : 'border-slate-200 text-slate-500 bg-slate-50/50'}`}>
-                                                        {row.quantity}
-                                                    </td>
-                                                    <td className={`px-4 py-2 border-r text-center ${isGrandTotal ? 'border-slate-600' : 'border-slate-200 text-slate-500 bg-slate-50/50'}`}>
-                                                        {row.unit}
-                                                    </td>
+                                                    {/* Dynamic fixed column cells */}
+                                                    {fixedColumns.map((col, colIdx) => {
+                                                        // Map column name to row field
+                                                        const fieldKey = col.toLowerCase().replace(/\s+/g, '_').replace('#', 'num');
+                                                        const isItemCol = colIdx === 0 || col.toLowerCase().includes('item');
+                                                        const isDescCol = col.toLowerCase().includes('desc');
+
+                                                        // Get value: try exact match, then common field names
+                                                        let value = row[fieldKey] || row[col.toLowerCase()];
+                                                        if (!value && isItemCol) value = row.item_id;
+                                                        if (!value && isDescCol) value = row.description;
+
+                                                        return (
+                                                            <td
+                                                                key={`fixed-${colIdx}`}
+                                                                className={`px-4 py-2 border-r ${isGrandTotal
+                                                                    ? 'border-slate-600 text-white' + (isDescCol ? ' text-lg' : '')
+                                                                    : isDescCol
+                                                                        ? 'border-slate-200 text-slate-700 truncate max-w-xs'
+                                                                        : 'border-slate-200 font-mono text-slate-600 bg-slate-50/50'}`}
+                                                                title={isDescCol ? value : undefined}
+                                                            >
+                                                                {isGrandTotal && isItemCol ? '' : value}
+                                                            </td>
+                                                        );
+                                                    })}
 
                                                     {/* Dynamic vendor columns */}
                                                     {data.proposals.map(p => {
@@ -187,8 +205,8 @@ export default function ComparisonMatrixModal({ rfpId, isOpen, onClose }) {
                                                                         <td
                                                                             key={`${p.id}-${colIdx}`}
                                                                             className={`px-2 py-2 border-r text-right ${isGrandTotal
-                                                                                    ? `border-slate-600 ${isTotalCol ? 'text-green-400 text-lg' : ''}`
-                                                                                    : `border-slate-200 ${isTotalCol ? 'font-medium text-slate-900 bg-slate-50/30' : 'text-slate-600 text-sm'}`
+                                                                                ? `border-slate-600 ${isTotalCol ? 'text-green-400 text-lg' : ''}`
+                                                                                : `border-slate-200 ${isTotalCol ? 'font-medium text-slate-900 bg-slate-50/30' : 'text-slate-600 text-sm'}`
                                                                                 }`}
                                                                         >
                                                                             {val[col] || '-'}

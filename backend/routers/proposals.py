@@ -174,8 +174,18 @@ async def upload_proposal(
          if val := extracted_data.get("summary"):
              summary = val
     
-    # ALWAYS extract these fields for comparison (even if user provided some basic fields)
-    experience = extracted_data.get("experience")
+    # Extract all enhanced fields from AI extraction (now as JSON arrays)
+    experience = extracted_data.get("experience", [])
+    scope_understanding = extracted_data.get("scope_understanding", [])
+    materials = extracted_data.get("materials", [])
+    timeline = extracted_data.get("timeline", [])
+    warranty = extracted_data.get("warranty", [])
+    safety = extracted_data.get("safety", [])
+    cost_breakdown = extracted_data.get("cost_breakdown", [])
+    termination_term = extracted_data.get("termination_term", [])
+    references = extracted_data.get("references", [])
+    
+    # Legacy fields (backward compatibility)
     methodology = extracted_data.get("methodology")
     warranties = extracted_data.get("warranties")
     timeline_details = extracted_data.get("timeline_details")
@@ -220,9 +230,27 @@ async def upload_proposal(
                 if summary and summary != db_p.summary:
                     db_p.summary = summary
                 
-                # Update new extended fields
+                # Update NEW enhanced extraction fields (JSON arrays)
                 if experience:
-                    db_p.experience = experience
+                    db_p.experience = experience if isinstance(experience, list) else [experience]
+                if scope_understanding:
+                    db_p.scope_understanding = scope_understanding if isinstance(scope_understanding, list) else [scope_understanding]
+                if materials:
+                    db_p.materials = materials if isinstance(materials, list) else [materials]
+                if timeline:
+                    db_p.timeline = timeline if isinstance(timeline, list) else [timeline]
+                if warranty:
+                    db_p.warranty = warranty if isinstance(warranty, list) else [warranty]
+                if safety:
+                    db_p.safety = safety if isinstance(safety, list) else [safety]
+                if cost_breakdown:
+                    db_p.cost_breakdown = cost_breakdown if isinstance(cost_breakdown, list) else [cost_breakdown]
+                if termination_term:
+                    db_p.termination_term = termination_term if isinstance(termination_term, list) else [termination_term]
+                if references:
+                    db_p.references = references if isinstance(references, list) else [references]
+                
+                # Legacy fields (backward compatibility)
                 if methodology:
                     db_p.methodology = methodology
                 if warranties:
@@ -242,6 +270,7 @@ async def upload_proposal(
                     
                 session.add(db_p)
                 session.commit()
+
 
     # Return refreshed proposal with extracted_text set
     return proposal_service.get_proposal(proposal.id)
@@ -350,20 +379,62 @@ def get_proposal_matrix(rfp_id: str):
             # Find matching row in p.proposal_form_data
             p_data = p.proposal_form_data or []
             
-            # Match by item_id (primary)
-            match = next((x for x in p_data if str(x.get('item_id')).strip() == str(item_id).strip()), None)
+            # Match by item_id - normalize both to string and strip
+            match = next((x for x in p_data if str(x.get('item_id', '')).strip() == str(item_id).strip()), None)
             
-            # Get values dict (new dynamic format) or construct from legacy fields
+            # Build values dict dynamically
             if match:
-                values = match.get('values', {})
+                values = match.get('values') or {}
                 
-                # Fallback for legacy format (unit_cost, total fields)
+                # If values dict is empty, build from flat fields in the match
                 if not values:
                     values = {}
+                    
+                    # Word synonyms for dynamic matching (price~cost, qty~quantity)
+                    synonyms = {
+                        'price': {'cost', 'rate'},
+                        'cost': {'price', 'rate'},
+                        'qty': {'quantity'},
+                        'quantity': {'qty'},
+                    }
+                    
+                    def expand_words(words):
+                        """Expand word set with synonyms."""
+                        expanded = set(words)
+                        for w in words:
+                            if w in synonyms:
+                                expanded.update(synonyms[w])
+                        return expanded
+                    
+                    # For each vendor column from RFP schema, find matching key in vendor data
                     for col in vendor_columns:
-                        col_key = col.lower().replace(' ', '_').replace('%', 'percent')
-                        if col_key in match:
-                            values[col] = match[col_key]
+                        col_words = set(col.lower().replace('_', ' ').replace('-', ' ').split())
+                        col_words_expanded = expand_words(col_words)
+                        col_key = col.lower().replace(' ', '_')
+                        
+                        for key, val in match.items():
+                            if key in ('item_id', 'description', 'section', 'values'):
+                                continue
+                            
+                            key_words = set(key.lower().replace('_', ' ').replace('-', ' ').split())
+                            key_words_expanded = expand_words(key_words)
+                            key_norm = key.lower().replace(' ', '_')
+                            
+                            # Match if:
+                            # 1. Exact normalized key match
+                            # 2. OR expanded word sets overlap significantly
+                            common_words = col_words_expanded & key_words_expanded
+                            
+                            if key_norm == col_key:
+                                # Exact match
+                                if val is not None:
+                                    values[col] = val
+                                    break
+                            elif len(common_words) >= 2 or (len(col_words) == 1 and len(key_words) == 1 and common_words):
+                                # Strong word overlap (2+ words match) or single-word exact match
+                                if val is not None:
+                                    values[col] = val
+                                    break
             else:
                 values = {}
             
