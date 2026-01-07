@@ -91,10 +91,15 @@ def upload_rfp(file: UploadFile = File(...)):
             analyzer = FormStructureAnalyzer()
             analysis = analyzer.analyze_rfp("RFP_Upload_Context")
             
-            proposal_form_schema = analysis.structure.model_dump()
-            proposal_form_rows = [r.model_dump() for r in analysis.rows]
-            
-            print(f"✓ Extracted proposal form: {len(analysis.rows)} rows, {len(analysis.structure.sections)} sections")
+            # Check if a valid form was found
+            if analysis.structure.form_title == "NONE" or not analysis.structure.tables:
+                print("ℹ No structured proposal form found in this RFP.")
+                proposal_form_schema = None
+                proposal_form_rows = []
+            else:
+                proposal_form_schema = analysis.structure.model_dump()
+                proposal_form_rows = [r.model_dump() for r in analysis.rows]
+                print(f"✓ Extracted proposal form: {len(analysis.rows)} rows, {len(analysis.structure.sections)} sections")
         except Exception as form_err:
             print(f"⚠ Proposal form extraction failed (non-fatal): {form_err}")
             # Continue without proposal form - not all RFPs have structured forms

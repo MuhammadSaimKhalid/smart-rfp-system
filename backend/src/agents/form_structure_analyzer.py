@@ -238,7 +238,17 @@ COLUMN CLASSIFICATION RULES:
   * "Total", "Extended Total", "Amount" - totals
   * "%" - percentages (for General Conditions)
 
-Be PRECISE with column names - use the EXACT text from the document."""),
+Be PRECISE with column names - use the EXACT text from the document.
+
+CRITICAL - NO FORM FOUND:
+If the document does NOT contain a structured proposal submission form, bid sheet, or pricing table (e.g., it is just a general text request without a specific tabular form), you MUST:
+- Set 'form_title' to "NONE"
+- Set 'tables' to an empty list []
+- Set 'fixed_columns' to an empty list []
+- Set 'vendor_columns' to an empty list []
+- Set 'sections' to an empty list []
+
+Do NOT invent a form if one does not exist."""),
             ("user", """RFP Document Content:
 
 {rfp_content}
