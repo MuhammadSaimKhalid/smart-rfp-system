@@ -204,15 +204,22 @@ class FormStructureAnalyzer:
         # Return content without misleading separators
         return "\n\n".join([c[2] for c in selected_chunks])
     
-    def discover_form_structure(self, rfp_context: str) -> ProposalFormStructure:
+    def discover_form_structure(self, rfp_context: str) -> ProposalFormStructure | None:
         """
         Analyzes RFP content to discover the proposal form structure dynamically.
         
+        Returns None if no proposal form is found in the document.
         Uses with_structured_output() for reliable extraction.
         """
         print("--- Form Structure Analyzer: Discovering Form Structure ---")
         
-        # Create structured LLM with ProposalFormStructure schema
+        # Step 1: Check if a proposal form actually exists in the document
+        form_exists = self._check_form_exists(rfp_context)
+        if not form_exists:
+            print("  ✗ No proposal form detected in this RFP document")
+            return None
+        
+        # Step 2: Extract the structure
         structured_llm = self.llm.with_structured_output(ProposalFormStructure)
         
         prompt = ChatPromptTemplate.from_messages([
@@ -243,6 +250,12 @@ Analyze this RFP and extract the complete proposal form structure.""")
         
         try:
             result = chain.invoke({"rfp_content": rfp_context})
+            
+            # Validate the result - check if it has meaningful content
+            if not result.fixed_columns and not result.vendor_columns:
+                print("  ✗ AI returned empty structure - no form detected")
+                return None
+                
             print(f"  ✓ Discovered {len(result.tables)} tables, {len(result.sections)} sections")
             print(f"  ✓ Fixed columns: {result.fixed_columns}")
             print(f"  ✓ Vendor columns: {result.vendor_columns}")
@@ -250,6 +263,40 @@ Analyze this RFP and extract the complete proposal form structure.""")
         except Exception as e:
             print(f"  ✗ Discovery failed: {e}")
             raise
+    
+    def _check_form_exists(self, context: str) -> bool:
+        """
+        Quick check to determine if the RFP contains a proposal submission form.
+        Uses keyword detection to avoid hallucinating forms that don't exist.
+        """
+        # Keywords that indicate a proposal form exists
+        form_indicators = [
+            "proposal submission form",
+            "bid form",
+            "pricing form",
+            "unit cost",
+            "unit price",
+            "total cost",
+            "item description",
+            "line item",
+            "qty",
+            "quantity",
+            "schedule of values",
+            "cost breakdown",
+            "proposal form",
+            "bid schedule"
+        ]
+        
+        context_lower = context.lower()
+        
+        # Count how many indicators are found
+        matches = sum(1 for indicator in form_indicators if indicator in context_lower)
+        
+        # Require at least 3 indicators to confirm a form exists
+        has_form = matches >= 3
+        
+        print(f"  Form detection: Found {matches} indicators. Form exists: {has_form}")
+        return has_form
     
     def extract_form_rows(self, rfp_context: str, structure: ProposalFormStructure) -> List[DiscoveredFormRow]:
         """
@@ -311,7 +358,7 @@ Extract all line items for the sections: {target_sections}""")
             print(f"  ✗ Row extraction failed: {e}")
             return []
     
-    def analyze_rfp(self, collection_name: str = "RFP_Context") -> FullProposalFormAnalysis:
+    def analyze_rfp(self, collection_name: str = "RFP_Context") -> FullProposalFormAnalysis | None:
         """
         Main entry point: Fully analyze an RFP and return its proposal form structure.
         
@@ -319,13 +366,17 @@ Extract all line items for the sections: {target_sections}""")
             collection_name: ChromaDB collection containing the ingested RFP
             
         Returns:
-            FullProposalFormAnalysis with structure and extracted rows
+            FullProposalFormAnalysis with structure and extracted rows, or None if no form found
         """
         # Step 1: Get context from vector store
         context = self.get_proposal_form_context(collection_name)
         
-        # Step 2: Discover structure
+        # Step 2: Discover structure (may return None if no form exists)
         structure = self.discover_form_structure(context)
+        
+        if structure is None:
+            print("  No proposal form found in RFP - returning None")
+            return None
         
         # Step 3: Extract all rows
         rows = self.extract_form_rows(context, structure)

@@ -58,7 +58,7 @@ def upload_rfp(file: UploadFile = File(...)):
     Upload and extract data from an RFP PDF.
     Now also extracts the proposal form structure for vendor submissions.
     Does NOT save to DB yet, just returns extracted data for the frontend editor.
-    """
+    """ 
     from services.ingest.extractor import extract_text
     from services.ingest.rfp_extractor import extract_rfp_details
     from backend.src.agents.ingestion import ingest_document
@@ -91,10 +91,12 @@ def upload_rfp(file: UploadFile = File(...)):
             analyzer = FormStructureAnalyzer()
             analysis = analyzer.analyze_rfp("RFP_Upload_Context")
             
-            proposal_form_schema = analysis.structure.model_dump()
-            proposal_form_rows = [r.model_dump() for r in analysis.rows]
-            
-            print(f"✓ Extracted proposal form: {len(analysis.rows)} rows, {len(analysis.structure.sections)} sections")
+            if analysis is not None:
+                proposal_form_schema = analysis.structure.model_dump()
+                proposal_form_rows = [r.model_dump() for r in analysis.rows]
+                print(f"✓ Extracted proposal form: {len(analysis.rows)} rows, {len(analysis.structure.sections)} sections")
+            else:
+                print("ℹ No proposal form found in this RFP document - skipping form extraction")
         except Exception as form_err:
             print(f"⚠ Proposal form extraction failed (non-fatal): {form_err}")
             # Continue without proposal form - not all RFPs have structured forms
