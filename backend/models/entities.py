@@ -118,6 +118,9 @@ class SavedComparisonModel(SQLModel, table=True):
     proposal_ids: List[str] = Field(
         sa_column=Column(JSON), default_factory=list, description="List of proposal IDs in snippet"
     )
+    analysis_results: List[dict] = Field(
+        sa_column=Column(JSON), default_factory=list, description="Cached AI analysis results (scores & rationale)"
+    )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

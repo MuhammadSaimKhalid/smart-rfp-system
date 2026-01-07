@@ -16,6 +16,7 @@ class SavedComparisonBase(BaseModel):
     rfp_id: str
     dimensions: List[str]
     proposal_ids: List[str]
+    analysis_results: Optional[List[dict]] = []
 
 class SavedComparisonRead(SavedComparisonBase):
     id: str
@@ -46,6 +47,7 @@ def list_comparisons(session: Session = Depends(get_db)):
             rfp_id=comp.rfp_id,
             dimensions=comp.dimensions,
             proposal_ids=comp.proposal_ids,
+            analysis_results=comp.analysis_results,
             rfp_title=title
         )
         comparisons.append(comp_read)
@@ -61,6 +63,7 @@ def save_comparison(comparison: SavedComparisonCreate, session: Session = Depend
     if existing:
         existing.dimensions = comparison.dimensions
         existing.proposal_ids = comparison.proposal_ids
+        existing.analysis_results = comparison.analysis_results
         session.add(existing)
         session.commit()
         session.refresh(existing)
@@ -78,6 +81,7 @@ def save_comparison(comparison: SavedComparisonCreate, session: Session = Depend
         rfp_id=saved_comp.rfp_id,
         dimensions=saved_comp.dimensions,
         proposal_ids=saved_comp.proposal_ids,
+        analysis_results=saved_comp.analysis_results,
         rfp_title=rfp.title if rfp else "Unknown RFP"
     )
 
@@ -95,6 +99,7 @@ def get_comparison(rfp_id: str, session: Session = Depends(get_db)):
         rfp_id=comp.rfp_id,
         dimensions=comp.dimensions,
         proposal_ids=comp.proposal_ids,
+        analysis_results=comp.analysis_results,
         rfp_title=rfp.title if rfp else "Unknown RFP"
     )
 

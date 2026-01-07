@@ -72,6 +72,12 @@ export default function Comparisons() {
                     if (data.dimensions && data.dimensions.length > 0) {
                         setSelectedDimensions(data.dimensions);
                         setShowReport(true);
+
+                        // Load Cached Results if available
+                        if (data.analysis_results && data.analysis_results.length > 0) {
+                            console.log("Loaded cached analysis results");
+                            setAiResults(data.analysis_results);
+                        }
                     }
                 })
                 .catch(() => {
@@ -104,68 +110,112 @@ export default function Comparisons() {
 
     const availableDimensions = useMemo(() => {
         return aiDimensions.length > 0 ? aiDimensions : [
+            { id: 'experience', name: 'Experience', type: 'general' },
             { id: 'cost', name: 'Cost', type: 'general' },
-            { id: 'timeline', name: 'Timeline', type: 'general' },
-            { id: 'experience', name: 'Experience', type: 'general' }
+            { id: 'materials_warranty', name: 'Materials/Warranty', type: 'general' },
+            { id: 'schedule', name: 'Schedule', type: 'general' },
+            { id: 'safety', name: 'Safety', type: 'general' },
+            { id: 'responsiveness', name: 'Responsiveness', type: 'general' }
         ];
     }, [aiDimensions]);
 
 
     // =======================
-    // CALCULATE SCORES
+    // AI COMPARISON ANALYSIS
     // =======================
-    const dimensionsData = useMemo(() => {
-        if (availableDimensions.length === 0 || activeProposals.length === 0) return [];
+    const [aiResults, setAiResults] = useState(null);
+    const [analyzing, setAnalyzing] = useState(false);
+    const [analysisError, setAnalysisError] = useState(null);
 
-        // Pre-calculate max price safely
-        const prices = activeProposals.map(prop => {
-            const safePrice = String(prop.price || '0');
-            const raw = parseFloat(safePrice.replace(/[^0-9.]/g, '')) || 0;
-            return safePrice.toLowerCase().includes('k') ? raw * 1000 : raw;
-        });
-        const maxPrice = Math.max(0, ...prices) || 100; // Correct usage
+    const generateReport = async () => {
+        if (selectedDimensions.length === 0) return;
 
-        const calculated = activeProposals.map(p => {
-            // Price/Cost Logic
-            const safePrice = String(p.price || '0');
-            const priceRaw = parseFloat(safePrice.replace(/[^0-9.]/g, '')) || 0;
-            const priceAmount = safePrice.toLowerCase().includes('k') ? priceRaw * 1000 : priceRaw;
+        setAnalyzing(true);
+        setAnalysisError(null);
+        setShowReport(true); // Switch to report view immediately to show loading state
 
-            // Text to analyze (prefer full extracted text, fall back to summary)
-            const analysisText = ((p.extracted_text || "") + " " + (p.summary || "")).toLowerCase();
-
-            const scores = {};
-
-            availableDimensions.forEach(dim => {
-                try {
-                    if (dim.id === 'cost') {
-                        scores[dim.id] = maxPrice > 0 ? Math.round(((maxPrice - priceAmount) / maxPrice) * 100) : 50;
-                        // Ensure score is within 0-100
-                        scores[dim.id] = Math.max(0, Math.min(100, scores[dim.id]));
-                    } else if (dim.id === 'timeline') {
-                        // Check specific timeline keywords or use explicit start date
-                        const hasDate = p.start_date || analysisText.includes('start') || analysisText.includes('schedule');
-                        scores[dim.id] = hasDate ? 85 : 60;
-                    } else {
-                        // Keyword matching for dynamic dimensions
-                        const keywords = dim.keywords || [dim.name.toLowerCase()];
-                        const matches = keywords.filter(kw => analysisText.includes(kw.toLowerCase()));
-                        // higher score for more matches, max 95, min 40
-                        const baseScore = 40;
-                        const matchBonus = (matches.length / Math.max(keywords.length, 1)) * 55;
-                        scores[dim.id] = Math.round(Math.min(baseScore + matchBonus, 95));
-                    }
-                } catch (err) {
-                    // Fallback
-                    scores[dim.id] = 50;
-                }
+        try {
+            const proposalIds = activeProposals.map(p => p.id);
+            const res = await fetch('http://localhost:8000/api/analysis/compare', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rfp_id: activeRFP.id,
+                    proposal_ids: proposalIds,
+                    dimensions: selectedDimensions
+                })
             });
 
-            // Overall score
-            const selectedScores = selectedDimensions.map(dimId => scores[dimId] || 50);
-            const overallScore = selectedScores.length > 0
-                ? Math.round(selectedScores.reduce((a, b) => a + b, 0) / selectedScores.length)
-                : Math.round(Object.values(scores).reduce((a, b) => a + b, 0) / Math.max(Object.values(scores).length, 1)); // safe div
+            if (!res.ok) throw new Error("Analysis failed");
+
+            const data = await res.json();
+            setAiResults(data.analyses);
+
+            // AUTO-SAVE Results
+            try {
+                await fetch('http://localhost:8000/api/comparisons', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        rfp_id: activeRFP.id,
+                        dimensions: selectedDimensions,
+                        proposal_ids: proposalIds,
+                        analysis_results: data.analyses
+                    })
+                });
+                console.log("DEBUG: Comparison auto-saved successfully");
+            } catch (saveErr) {
+                console.error("Failed to auto-save comparison:", saveErr);
+            }
+
+        } catch (err) {
+            console.error(err);
+            setAnalysisError("Failed to generate AI comparison. Please try again.");
+        } finally {
+            setAnalyzing(false);
+        }
+    };
+
+    const saveComparison = async () => {
+        if (!activeRFP) return;
+        try {
+            const proposalIds = activeProposals.map(p => p.id);
+            await fetch('http://localhost:8000/api/comparisons', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rfp_id: activeRFP.id,
+                    dimensions: selectedDimensions,
+                    proposal_ids: proposalIds,
+                    analysis_results: aiResults || []
+                })
+            });
+            alert("Comparison saved successfully!");
+        } catch (err) {
+            console.error(err);
+            alert("Failed to save comparison.");
+        }
+    };
+
+    // Merge AI results with Proposal Basic Data for Charts/Table
+    const dimensionsData = useMemo(() => {
+        if (!aiResults || activeProposals.length === 0) return [];
+
+        return activeProposals.map(p => {
+            const analysis = aiResults.find(a => a.proposal_id === p.id);
+            const scores = {};
+            let overallScore = 0;
+
+            if (analysis) {
+                analysis.scores.forEach(s => {
+                    scores[s.dimension] = s.score;
+                });
+                // Calculate average
+                const scoreValues = analysis.scores.map(s => s.score);
+                if (scoreValues.length > 0) {
+                    overallScore = Math.round(scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length);
+                }
+            }
 
             return {
                 id: p.id,
@@ -173,13 +223,11 @@ export default function Comparisons() {
                 price: p.price,
                 summary: p.summary || 'No summary',
                 scores: scores,
-                overallScore
+                overallScore,
+                rationale: analysis ? analysis.scores : [] // Pass rationale for tooltip
             };
         });
-
-        console.log('DEBUG: Calculated Dimensions Data', calculated);
-        return calculated;
-    }, [activeProposals, availableDimensions, selectedDimensions]);
+    }, [aiResults, activeProposals]);
 
     // =======================
     // DIMENSION SELECTION HANDLERS
@@ -192,11 +240,7 @@ export default function Comparisons() {
         }
     };
 
-    const generateReport = () => {
-        if (selectedDimensions.length > 0) {
-            setShowReport(true);
-        }
-    };
+    // Async generateReport is defined above.
 
     // =======================
     // CHARTS (only for selected dimensions)
@@ -217,7 +261,7 @@ export default function Comparisons() {
 
     const radarSeries = dimensionsData.slice(0, 3).map(d => ({
         name: d.vendor,
-        data: selectedDimensions.map(dimId => d.scores[dimId] || 50)
+        data: selectedDimensions.map(dimId => (d.scores && d.scores[dimId]) || 0)
     }));
 
     const barOptions = {
@@ -235,179 +279,6 @@ export default function Comparisons() {
         { name: 'Overall Score', data: dimensionsData.map(d => d.overallScore || 0) },
         { name: 'Price Score', data: dimensionsData.map(d => (d.scores && d.scores.cost) || 0) }
     ];
-
-    // =======================
-    // RENDER: DIMENSION SELECTION
-    // =======================
-    // =======================
-    // RENDER: LIST OF COMPARISONS (If no specific RFP selected)
-    // =======================
-    // =======================
-    // RENDER: LIST OF COMPARISONS (If no specific RFP selected)
-    // =======================
-    if (!rfpId) {
-        return (
-            <div className="animate-fade-in pb-12">
-                <h1 className="text-3xl font-bold text-slate-900 mb-6">Saved Comparisons</h1>
-                {loadingSaved ? (
-                    <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-                        <p className="text-slate-500">Loading saved comparisons...</p>
-                    </div>
-                ) : savedComparisons.length === 0 ? (
-                    <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-                        <p className="text-slate-500 mb-4">No saved comparisons found.</p>
-                        <p className="text-sm text-slate-400">Navigate to an RFP, generate a report, and save it to see it here.</p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {savedComparisons.map(comp => (
-                            <button
-                                key={comp.id}
-                                onClick={() => setSearchParams({ rfp: comp.rfp_id })}
-                                className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all text-left"
-                            >
-                                <h3 className="font-bold text-lg text-slate-800 mb-2">{comp.rfp_title || 'Unknown RFP'}</h3>
-                                <p className="text-sm text-slate-500 mb-4 line-clamp-2">Comparison of proposals</p>
-                                <div className="flex justify-between items-center text-xs font-medium text-slate-400">
-                                    <span>{new Date().toLocaleDateString()}</span>
-                                    <span className="text-blue-600">View Report →</span>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                )}
-            </div>
-        );
-    }
-
-    if (!showReport) {
-        return (
-            <div className="animate-fade-in pb-12">
-                <div className="flex justify-between items-center mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold text-slate-900 mb-2">Compare Proposals</h1>
-                        <p className="text-slate-500">For RFP: <span className="font-bold text-slate-800">{activeRFP?.title}</span></p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-slate-200">
-                            <label htmlFor="filter-accepted" className="text-sm font-medium text-slate-700 cursor-pointer select-none">Show Accepted Only</label>
-                            <div
-                                onClick={() => setShowAcceptedOnly(!showAcceptedOnly)}
-                                className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${showAcceptedOnly ? 'bg-blue-600' : 'bg-slate-300'}`}
-                            >
-                                <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${showAcceptedOnly ? 'left-6' : 'left-1'}`}></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-                    <h3 className="font-bold text-slate-700 mb-2">Select Comparison Dimensions (Max 5)</h3>
-                    <p className="text-sm text-slate-500 mb-6">Choose the criteria you want to use for comparing proposals</p>
-
-                    {/* General Dimensions */}
-                    <div className="mb-6">
-                        <div className="text-xs font-bold text-slate-400 uppercase mb-3">General Dimensions</div>
-                        <div className="flex flex-wrap gap-3">
-                            {availableDimensions.filter(d => d.type === 'general').length > 0 ? (
-                                availableDimensions.filter(d => d.type === 'general').map(dim => (
-                                    <button
-                                        key={dim.id}
-                                        onClick={() => toggleDimension(dim.id)}
-                                        className={`px-4 py-2 rounded-full font-medium transition-all ${selectedDimensions.includes(dim.id)
-                                            ? 'bg-blue-600 text-white'
-                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                            }`}
-                                        disabled={!selectedDimensions.includes(dim.id) && selectedDimensions.length >= 5}
-                                        title={!selectedDimensions.includes(dim.id) && selectedDimensions.length >= 5 ? "Max 5 dimensions selected" : dim.description}
-                                    >
-                                        {dim.name}
-                                    </button>
-                                ))
-                            ) : (
-                                <p className="text-sm text-slate-400 italic">No general dimensions available.</p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* AI-Extracted Dimensions */}
-                    <div className="mb-6">
-                        <div className="text-xs font-bold text-slate-400 uppercase mb-3">RFP Requirement Dimensions</div>
-                        {loadingDimensions ? (
-                            <div className="flex items-center space-x-2 text-slate-400">
-                                <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full"></div>
-                                <span className="text-sm italic">AI is extracting dimensions...</span>
-                            </div>
-                        ) : availableDimensions.filter(d => d.type === 'dynamic').length > 0 ? (
-                            <div className="flex flex-wrap gap-3">
-                                {availableDimensions.filter(d => d.type === 'dynamic').map(dim => (
-                                    <button
-                                        key={dim.id}
-                                        onClick={() => toggleDimension(dim.id)}
-                                        className={`px-4 py-2 rounded-full font-medium transition-all ${selectedDimensions.includes(dim.id)
-                                            ? 'bg-teal-600 text-white'
-                                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                            }`}
-                                        disabled={!selectedDimensions.includes(dim.id) && selectedDimensions.length >= 5}
-                                        title={!selectedDimensions.includes(dim.id) && selectedDimensions.length >= 5 ? "Max 5 dimensions selected" : dim.description}
-                                    >
-                                        {dim.name}
-                                    </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-sm text-slate-400 italic">No specific dimensions extracted yet.</p>
-                        )}
-                    </div>
-
-                    <div className="flex items-center justify-between pt-6 border-t border-slate-200">
-                        <div className="text-sm text-slate-600">
-                            Selected: <span className="font-bold text-slate-900">{selectedDimensions.length}</span> / 5
-                        </div>
-                        <button
-                            onClick={generateReport}
-                            disabled={selectedDimensions.length === 0}
-                            className={`px-6 py-3 rounded-lg font-semibold ${selectedDimensions.length > 0
-                                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                }`}
-                        >
-                            Generate Report
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-
-
-    const saveComparison = async () => {
-        // Should really save current accepted proposals too
-        const proposalIds = activeProposals.map(p => p.id);
-
-        try {
-            const res = await fetch('http://localhost:8000/api/comparisons', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    rfp_id: rfpId,
-                    dimensions: selectedDimensions,
-                    proposal_ids: proposalIds
-                })
-            });
-
-            if (res.ok) {
-                alert("Comparison report saved successfully!");
-            } else {
-                alert("Failed to save comparison.");
-            }
-        } catch (e) {
-            console.error(e);
-            alert("Error saving comparison.");
-        }
-    };
 
     // =======================
     // RENDER: COMPARISON REPORT
@@ -453,8 +324,24 @@ export default function Comparisons() {
                 `}
             </style>
 
+            {/* Loading / Error States */}
+            {analyzing && (
+                <div className="bg-blue-50 border border-blue-200 p-12 rounded-xl text-center mb-8 animate-pulse">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-700 mb-4"></div>
+                    <h3 className="text-lg font-bold text-blue-800">AI is Analyzing Proposals...</h3>
+                    <p className="text-blue-600">Checking DB for details, comparing against RFP Budget & Deadline, and generating scores.</p>
+                </div>
+            )}
+
+            {analysisError && (
+                <div className="bg-red-50 border border-red-200 p-8 rounded-xl text-center mb-8">
+                    <p className="text-red-800 font-semibold">{analysisError}</p>
+                    <button onClick={() => setShowReport(false)} className="mt-4 text-red-600 underline">Go back</button>
+                </div>
+            )}
+
             {/* Charts */}
-            {dimensionsData.length > 0 ? (
+            {!analyzing && !analysisError && dimensionsData.length > 0 && (
                 <>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -467,7 +354,9 @@ export default function Comparisons() {
                         </div>
                     </div>
                 </>
-            ) : (
+            )}
+
+            {!analyzing && !analysisError && dimensionsData.length === 0 && (
                 <div className="bg-amber-50 border border-amber-200 p-8 rounded-xl text-center mb-8">
                     <p className="text-amber-800 font-semibold mb-2">No comparison data available.</p>
                     <p className="text-amber-600 text-sm">Either no proposals are accepted or data is missing. Please accept proposals in the RFP first.</p>
@@ -497,14 +386,9 @@ export default function Comparisons() {
                                                 d.scores[dimId] >= 60 ? 'bg-yellow-100 text-yellow-700' :
                                                     'bg-red-100 text-red-700'
                                                 }`}>
-                                                {dimId === 'cost' && d.scores[dimId] >= 80 ? 'Top Tier' :
-                                                    dimId === 'cost' && d.scores[dimId] >= 60 ? 'Standard' :
-                                                        dimId === 'cost' ? 'High Cost' :
-                                                            dimId === 'timeline' && d.scores[dimId] >= 80 ? 'Top Tier' :
-                                                                dimId === 'timeline' && d.scores[dimId] >= 60 ? 'Standard' :
-                                                                    dimId === 'timeline' ? 'Slow' :
-                                                                        dimId === 'experience' && d.scores[dimId] >= 80 ? 'Top Tier' :
-                                                                            dimId === 'experience' && d.scores[dimId] >= 60 ? 'Standard' : 'Low Experience'}
+                                                {dimId === 'cost' ? (d.scores[dimId] >= 80 ? 'Best Price' : d.scores[dimId] >= 60 ? 'Standard' : 'High Cost') :
+                                                    dimId === 'schedule' ? (d.scores[dimId] >= 80 ? 'Fast' : d.scores[dimId] >= 60 ? 'Standard' : 'Slow') :
+                                                        d.scores[dimId] >= 80 ? 'Excellent' : d.scores[dimId] >= 60 ? 'Good' : 'Fair'}
                                             </span>
                                         </td>
                                     ))}
