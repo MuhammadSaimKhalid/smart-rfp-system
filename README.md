@@ -23,23 +23,50 @@
 
 ## 📋 Overview
 
-**Smart RFP System** transforms manual, error-prone procurement processes into instant, data-driven decisions using state-of-the-art AI. Upload vendor proposal PDFs and let AI automatically extract, compare, and visualize contractor data—no manual data entry required.
+**Procurement teams spend countless hours manually reviewing vendor proposals, extracting data into spreadsheets, and struggling to make fair comparisons.** The Smart RFP System eliminates this pain by leveraging AI to automate the entire proposal evaluation lifecycle.
+
+- 🔍 **Upload any RFP PDF** → AI extracts requirements, deadlines, and proposal form structures
+- 📤 **Vendors submit proposals** → AI automatically parses pricing, timelines, experience, materials, and warranties
+- ⚖️ **Compare intelligently** → Dynamic comparison matrices align vendor data row-by-row against RFP requirements
+- 💬 **Chat with proposals** → Ask natural language questions about any vendor submission
+- 📊 **Decide with confidence** → Visual reports, radar charts, and AI-scored rankings surface the best-fit vendor
 
 ```mermaid
-flowchart LR
-    subgraph INPUT["📥 Input"]
-        A[Upload RFP] --> B[Upload Proposals]
+flowchart TB
+    subgraph INPUT["📥 Document Upload"]
+        RFP[Upload RFP PDF]
+        PROP1[Vendor A Proposal]
+        PROP2[Vendor B Proposal]
+        PROP3[Vendor C Proposal]
     end
-    
-    subgraph AI["🤖 AI Processing"]
-        B --> C[PDF Extraction]
-        C --> D[Data Analysis]
+
+    subgraph EXTRACT["🤖 AI Extraction Engine"]
+        RFP --> SCHEMA[Discover Form Schema]
+        PROP1 --> PARSE1[Extract Pricing & Terms]
+        PROP2 --> PARSE2[Extract Pricing & Terms]
+        PROP3 --> PARSE3[Extract Pricing & Terms]
+        SCHEMA --> ALIGN[Align Vendor Data to Schema]
+        PARSE1 --> ALIGN
+        PARSE2 --> ALIGN
+        PARSE3 --> ALIGN
     end
-    
-    subgraph OUTPUT["📊 Output"]
-        D --> E[Comparison Matrix]
-        D --> F[Visual Reports]
-        D --> G[AI Chat]
+
+    subgraph STORE["💾 Data Layer"]
+        ALIGN --> VECTOR[(ChromaDB Embeddings)]
+        ALIGN --> DB[(SQLite Database)]
+    end
+
+    subgraph ANALYZE["📊 Analysis & Comparison"]
+        DB --> MATRIX[Comparison Matrix]
+        DB --> SCORE[AI Scoring Engine]
+        VECTOR --> CHAT[Proposal Chat]
+        MATRIX --> REPORT[Visual Reports]
+        SCORE --> REPORT
+    end
+
+    subgraph DECIDE["✅ Decision"]
+        REPORT --> WINNER[Select Winner]
+        CHAT --> WINNER
     end
 ```
 
