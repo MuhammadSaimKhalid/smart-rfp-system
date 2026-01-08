@@ -166,8 +166,11 @@ USE_FALLBACK_PROVIDER=false
 
 <div align="center">
 
-[![Watch Demo](https://img.shields.io/badge/▶_Watch_Full_Demo-4285F4?style=for-the-badge&logo=google-drive&logoColor=white)](https://drive.google.com/file/d/1p7Qom6bnGoPnj_k_okydY2Aqj_r7k1W0/view?usp=sharing)
-[![View Screenshots](https://img.shields.io/badge/📸_View_Screenshots-34A853?style=for-the-badge&logo=google-drive&logoColor=white)](https://drive.google.com/drive/folders/1K_I2kzRI2K7DYkH4y7h7mbCGqcxh-NzW?usp=sharing)
+[![Watch Demo](docs/images/ezgif.com-animated-gif-maker.gif)](https://drive.google.com/file/d/1p7Qom6bnGoPnj_k_okydY2Aqj_r7k1W0/view?usp=sharing)
+
+*Click to watch full demo*
+
+[![View Screenshots](https://img.shields.io/badge/📸_View_All_Screenshots-34A853?style=for-the-badge&logo=google-drive&logoColor=white)](https://drive.google.com/drive/folders/1K_I2kzRI2K7DYkH4y7h7mbCGqcxh-NzW?usp=sharing)
 
 </div>
 
