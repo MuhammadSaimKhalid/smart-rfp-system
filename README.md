@@ -142,8 +142,10 @@ USE_FALLBACK_PROVIDER=false     # Set to 'true' to force fallback
 
 | | |
 |:-------------------------:|:-------------------------:|
-| <img width="1604" alt="Create RFP" src="docs/images/create-rfp.png"> <br /> **Smart RFP Creation** | <img width="1604" alt="Analysis" src="docs/images/proposal-analysis.png"> <br /> **AI Proposal Analysis** |
-| <img width="1604" alt="Comparison" src="docs/images/comparison.png"> <br /> **Side-by-Side Review** | <img width="1604" alt="Charts" src="docs/images/radar-chart.png"> <br /> **Decision Charts** |
+| <img width="600" alt="Dashboard" src="docs/images/Dashboard Preview.png"> <br /> **Dashboard Overview** | <img width="600" alt="Open RFPs" src="docs/images/OPEN RFP_s.png"> <br /> **Open RFPs** |
+| <img width="600" alt="AI Extracted RFP" src="docs/images/AI extracted RFP.png"> <br /> **AI-Extracted RFP Details** | <img width="600" alt="Empty RFP" src="docs/images/Empty RFP.png"> <br /> **Create New RFP** |
+| <img width="600" alt="Proposal Upload" src="docs/images/Proposal Upload.png"> <br /> **Proposal Upload** | <img width="600" alt="Vendor Proposal" src="docs/images/Vendor Submitted Proposal.png"> <br /> **Vendor Submitted Proposal** |
+| <img width="600" alt="Dimension Selector" src="docs/images/ AI extracted  Dimensions Comparison Selector.png"> <br /> **AI Comparison Dimensions** | <img width="600" alt="Comparison Report" src="docs/images/Comparison Report.png"> <br /> **Comparison Report** |
 
 </div>
 
