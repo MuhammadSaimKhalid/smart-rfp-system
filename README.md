@@ -119,7 +119,7 @@ flowchart TB
 
 ```bash
 # Clone the repository
-git clone https://github.com/saim-honey388/smart-rfp-system.git
+git clone https://github.com/MuhammadSaimKhalid/smart-rfp-system.git
 cd smart-rfp-system
 
 # Create virtual environment
@@ -208,7 +208,7 @@ USE_FALLBACK_PROVIDER=false
 
 **Saim Khalid** – [saim.khalid983@gmail.com](mailto:saim.khalid983@gmail.com)
 
-[![GitHub](https://img.shields.io/badge/GitHub-saim--honey388-181717?style=flat-square&logo=github)](https://github.com/saim-honey388)
+[![GitHub](https://img.shields.io/badge/GitHub-MuhammadSaimKhalid-181717?style=flat-square&logo=github)](https://github.com/MuhammadSaimKhalid)
 
 ---
 
